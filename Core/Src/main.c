@@ -21,8 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "sht2x_for_stm32_hal.h"
-#include "hd44780.h"
+//#include "sht2x_for_stm32_hal.h"
+//#include "hd44780.h"
+#include "pca9685.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,22 +49,28 @@ I2C_HandleTypeDef hi2c1;
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
+//unsigned char deg_sym[FONT_HEIGHT] = {0x07,0x05,0x07,0x00,0x00,0x00,0x00,0x00};
+//Create the handle for the PWM driver.
+pca9685_handle_t pwmControllerHandle = {
+    .i2c_handle = &hi2c1,
+    .device_address = PCA9865_I2C_DEFAULT_DEVICE_ADDRESS,
+    .inverted = false
+};
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM4_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-unsigned char deg_sym[FONT_HEIGHT] = {0x07,0x05,0x07,0x00,0x00,0x00,0x00,0x00};
 
 /* USER CODE END 0 */
 
@@ -95,25 +102,35 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_I2C1_Init();
   MX_ADC1_Init();
   MX_TIM4_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+
   // temperature-humidity sensor
-  SHT2x_Init(&hi2c1);
-  SHT2x_SetResolution(RES_14_12);
-  SHT2x_SoftReset();
+//  SHT2x_Init(&hi2c1);
+//  SHT2x_SetResolution(RES_14_12);
+//  SHT2x_SoftReset();
+
   // LCD display
-  lcdInit();
+  //lcdInit();
   // load degree symbol
-  lcdLoadChar(deg_sym,6);
+  //lcdLoadChar(deg_sym,6);
+
   //PWM timer
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
 
+  //RGB LED Driver
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
+  // Initialize driver (performs basic setup).
+  pca9685_init(&pwmControllerHandle);
 
+  // Set PWM frequency.
+  // The frequency must be between 24Hz and 1526Hz.
+  pca9685_set_pwm_frequency(&pwmControllerHandle, 1000.0f);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -123,18 +140,18 @@ int main(void)
 
   while (1)
   {
-	  float cel = SHT2x_GetTemperature(1);
-	  float rh = SHT2x_GetRelativeHumidity(1);
-
-	  lcdClrScr();
-	  lcdPuts("Temp: ");
-	  lcdFtos(cel, 3);
-	  lcdPutc(6);
-	  lcdPuts("C\n");
-	  lcdPuts("Hum : ");
-	  lcdFtos(rh, 3);
-	  lcdPuts(" %");
-	  HAL_Delay(500);
+//	  float cel = SHT2x_GetTemperature(1);
+//	  float rh = SHT2x_GetRelativeHumidity(1);
+//
+//	  lcdClrScr();
+//	  lcdPuts("Temp: ");
+//	  lcdFtos(cel, 3);
+//	  lcdPutc(6);
+//	  lcdPuts("C\n");
+//	  lcdPuts("Hum : ");
+//	  lcdFtos(rh, 3);
+//	  lcdPuts(" %");
+//	  HAL_Delay(1000);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -357,6 +374,9 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOE, LCD_RS_Pin|LCD_RW_Pin|LCD_E_Pin|LCD_D4_Pin
                           |LCD_D5_Pin|LCD_D6_Pin|LCD_D7_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
+
   /*Configure GPIO pins : LCD_RS_Pin LCD_RW_Pin LCD_E_Pin LCD_D4_Pin
                            LCD_D5_Pin LCD_D6_Pin LCD_D7_Pin */
   GPIO_InitStruct.Pin = LCD_RS_Pin|LCD_RW_Pin|LCD_E_Pin|LCD_D4_Pin
@@ -365,6 +385,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -387,10 +414,16 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 
         uint32_t dutyCycle = 1000 - lux;
 
-        TIM4->CCR1=dutyCycle;
-        TIM4->CCR2=dutyCycle;
+        TIM4->CCR1=lux;
+        TIM4->CCR2=lux;
         TIM4->CCR3=dutyCycle;
-        TIM4->CCR4=dutyCycle;
+
+        float oneToZeroDutyCycle = (float) dutyCycle / 1000.0;
+
+
+        pca9685_set_channel_duty_cycle(&pwmControllerHandle, 0, 1 - oneToZeroDutyCycle, true);
+        pca9685_set_channel_duty_cycle(&pwmControllerHandle, 1, oneToZeroDutyCycle, true);
+        pca9685_set_channel_duty_cycle(&pwmControllerHandle, 2, oneToZeroDutyCycle/2, true);
 
         HAL_ADC_Start_IT(&hadc1);
   }
