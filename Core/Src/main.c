@@ -116,7 +116,7 @@ int main(void)
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
+
 
 
   /* USER CODE END 2 */
@@ -126,8 +126,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 
   HAL_ADC_Start_IT(&hadc1);
-  uint32_t adcValue = 0;
-  volatile HAL_StatusTypeDef adcPoolResult;
+  HAL_ADC_Start_IT(&hadc2);
+//  uint32_t adcValue = 0;
+//  volatile HAL_StatusTypeDef adcPoolResult;
 
   while (1)
   {
@@ -144,26 +145,26 @@ int main(void)
 	  lcdPuts(" %");
 	  HAL_Delay(500);
 
-	  HAL_ADC_Start(&hadc2);
 
-	  adcPoolResult = HAL_ADC_PollForConversion(&hadc2, 10);
 
-	  if (adcPoolResult == HAL_OK) {
-		  adcValue = HAL_ADC_GetValue(&hadc2);
-	  } else {
-		  continue;
-	  }
-
-	  if (adcValue < 2048)
-		{
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
-			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
-		}
-		else if (adcValue >= 2048)
-		{
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
-			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_RESET);
-		}
+//	  adcPoolResult = HAL_ADC_PollForConversion(&hadc2, 10);
+//
+//	  if (adcPoolResult == HAL_OK) {
+//		  adcValue = HAL_ADC_GetValue(&hadc2);
+//	  } else {
+//		  continue;
+//	  }
+//
+//	  if (adcValue < 2048)
+//		{
+//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
+//			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
+//		}
+//		else if (adcValue >= 2048)
+//		{
+//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
+//			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_RESET);
+//		}
 
 
     /* USER CODE END WHILE */
@@ -485,24 +486,24 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
         TIM4->CCR1=dutyCycle;
         TIM4->CCR2=dutyCycle;
         TIM4->CCR3=dutyCycle;
-        TIM4->CCR4=dutyCycle;
+
 
         HAL_ADC_Start_IT(&hadc1);
-  	  }// else if (hadc->Instance == ADC2) {
-//	  adcValue = HAL_ADC_GetValue(&hadc2);
-//
-//
-//	  if (adcValue < 2048)
-//		{
-//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
-//			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
-//		}
-//		else if (adcValue >= 2048)
-//		{
-//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
-//			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_RESET);
-//		}
-//  }
+  	  } else if (hadc->Instance == ADC2) {
+	  adcValue = HAL_ADC_GetValue(&hadc2);
+
+
+	  if (adcValue < 2048)
+		{
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
+
+		}
+		else if (adcValue >= 2048)
+		{
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
+		}
+	  HAL_ADC_Start_IT(&hadc2);
+  }
 }
 
 /* USER CODE END 4 */
