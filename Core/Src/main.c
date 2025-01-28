@@ -68,7 +68,8 @@ static void MX_ADC2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 unsigned char deg_sym[FONT_HEIGHT] = {0x07,0x05,0x07,0x00,0x00,0x00,0x00,0x00};
-
+volatile int adc1Flag = 0;
+volatile int adc2Flag = 0;
 /* USER CODE END 0 */
 
 /**
@@ -114,15 +115,14 @@ int main(void)
   lcdLoadChar(deg_sym,6);
   //PWM timer
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
 
 
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
-
   /* USER CODE BEGIN WHILE */
 
   HAL_ADC_Start_IT(&hadc1);
@@ -132,6 +132,47 @@ int main(void)
 
   while (1)
   {
+	  uint32_t adcValue;
+
+
+	    if(adc1Flag)
+	    {
+	          adcValue = HAL_ADC_GetValue(&hadc1);
+
+	          float volts = adcValue * 5.0 / 4096.0;
+	          float amps = volts / 10000.0;  // across 10,000 Ohms
+	          float microamps = amps * 1000000;
+	          float lux = microamps * 2.0;
+
+	          uint32_t dutyCycle = 1000 - lux;
+
+	          TIM4->CCR1=dutyCycle;
+	          TIM4->CCR3=dutyCycle;
+	          TIM4->CCR4=dutyCycle;
+
+	          adc1Flag = 0;
+	          HAL_ADC_Start_IT(&hadc1);
+
+	    	  }
+	    if (adc2Flag) {
+	  	  adcValue = HAL_ADC_GetValue(&hadc2);
+
+
+	  	  if (adcValue < 2048)
+	  		{
+	  			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
+
+	  		}
+	  		else if (adcValue >= 2048)
+	  		{
+	  			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
+	  		}
+	  	  adc2Flag = 0;
+	  	  HAL_ADC_Start_IT(&hadc2);
+
+	    }
+
+
 	  float cel = SHT2x_GetTemperature(1);
 	  float rh = SHT2x_GetRelativeHumidity(1);
 
@@ -143,7 +184,8 @@ int main(void)
 	  lcdPuts("Hum : ");
 	  lcdFtos(rh, 3);
 	  lcdPuts(" %");
-	  HAL_Delay(500);
+
+
 
 
 
@@ -308,7 +350,7 @@ static void MX_ADC2_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_0;
   sConfig.Rank = 1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  sConfig.SamplingTime = ADC_SAMPLETIME_480CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -468,42 +510,10 @@ static void MX_GPIO_Init(void)
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
-  uint32_t adcValue;
-
-  //uint32_t adc2Value;
-
-  if(hadc->Instance == ADC1)
-  {
-        adcValue = HAL_ADC_GetValue(&hadc1);
-
-        float volts = adcValue * 5.0 / 4096.0;
-        float amps = volts / 10000.0;  // across 10,000 Ohms
-        float microamps = amps * 1000000;
-        float lux = microamps * 2.0;
-
-        uint32_t dutyCycle = 1000 - lux;
-
-        TIM4->CCR1=dutyCycle;
-        TIM4->CCR2=dutyCycle;
-        TIM4->CCR3=dutyCycle;
-
-
-        HAL_ADC_Start_IT(&hadc1);
-  	  } else if (hadc->Instance == ADC2) {
-	  adcValue = HAL_ADC_GetValue(&hadc2);
-
-
-	  if (adcValue < 2048)
-		{
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
-
-		}
-		else if (adcValue >= 2048)
-		{
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
-		}
-	  HAL_ADC_Start_IT(&hadc2);
-  }
+  if (hadc->Instance == ADC1)
+	  adc1Flag = 1;
+  else if (hadc->Instance == ADC2)
+	  adc2Flag = 1;
 }
 
 /* USER CODE END 4 */
