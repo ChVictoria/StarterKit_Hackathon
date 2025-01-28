@@ -5,3 +5,5 @@
 
 void HCSR04_Trigger(GPIO_TypeDef* Port, uint16_t Pin);
 float HCSR04_ListenEcho(GPIO_TypeDef* Port, uint16_t Pin);
+
+#endif
