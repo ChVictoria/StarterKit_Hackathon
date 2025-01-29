@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "sht2x_for_stm32_hal.h"
 #include "hd44780.h"
+#include "hcsr04.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,7 +33,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -46,10 +46,10 @@ ADC_HandleTypeDef hadc2;
 
 I2C_HandleTypeDef hi2c1;
 
+TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -59,6 +59,7 @@ static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_ADC2_Init(void);
+static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 
 
@@ -70,6 +71,7 @@ static void MX_ADC2_Init(void);
 unsigned char deg_sym[FONT_HEIGHT] = {0x07,0x05,0x07,0x00,0x00,0x00,0x00,0x00};
 volatile int adc1Flag = 0;
 volatile int adc2Flag = 0;
+
 /* USER CODE END 0 */
 
 /**
@@ -78,8 +80,8 @@ volatile int adc2Flag = 0;
   */
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
 
+  /* USER CODE BEGIN 1 */
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -104,22 +106,23 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM4_Init();
   MX_ADC2_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   // temperature-humidity sensor
   SHT2x_Init(&hi2c1);
   SHT2x_SetResolution(RES_14_12);
   SHT2x_SoftReset();
-  // LCD display
+
   lcdInit();
-  // load degree symbol
   lcdLoadChar(deg_sym,6);
-  //PWM timer
+
+  // PWM timer
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
 
-
-
+  // Timer for HC-SR04 echo
+  HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -127,91 +130,13 @@ int main(void)
 
   HAL_ADC_Start_IT(&hadc1);
   HAL_ADC_Start_IT(&hadc2);
-//  uint32_t adcValue = 0;
-//  volatile HAL_StatusTypeDef adcPoolResult;
+  uint32_t adcValue = 0;
+  volatile HAL_StatusTypeDef adcPoolResult;
 
   while (1)
   {
-	  uint32_t adcValue;
-
-
-	    if(adc1Flag)
-	    {
-	          adcValue = HAL_ADC_GetValue(&hadc1);
-
-	          float volts = adcValue * 5.0 / 4096.0;
-	          float amps = volts / 10000.0;  // across 10,000 Ohms
-	          float microamps = amps * 1000000;
-	          float lux = microamps * 2.0;
-
-	          uint32_t dutyCycle = 1000 - lux;
-
-	          TIM4->CCR1=dutyCycle;
-	          TIM4->CCR3=dutyCycle;
-	          TIM4->CCR4=dutyCycle;
-
-	          adc1Flag = 0;
-	          HAL_ADC_Start_IT(&hadc1);
-
-	    	  }
-	    if (adc2Flag) {
-	  	  adcValue = HAL_ADC_GetValue(&hadc2);
-
-
-	  	  if (adcValue < 2048)
-	  		{
-	  			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
-
-	  		}
-	  		else if (adcValue >= 2048)
-	  		{
-	  			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
-	  		}
-	  	  adc2Flag = 0;
-	  	  HAL_ADC_Start_IT(&hadc2);
-
-	    }
-
-
-	  float cel = SHT2x_GetTemperature(1);
-	  float rh = SHT2x_GetRelativeHumidity(1);
-
-	  lcdClrScr();
-	  lcdPuts("Temp: ");
-	  lcdFtos(cel, 3);
-	  lcdPutc(6);
-	  lcdPuts("C\n");
-	  lcdPuts("Hum : ");
-	  lcdFtos(rh, 3);
-	  lcdPuts(" %");
-
-
-
-
-
-//	  adcPoolResult = HAL_ADC_PollForConversion(&hadc2, 10);
-//
-//	  if (adcPoolResult == HAL_OK) {
-//		  adcValue = HAL_ADC_GetValue(&hadc2);
-//	  } else {
-//		  continue;
-//	  }
-//
-//	  if (adcValue < 2048)
-//		{
-//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
-//			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
-//		}
-//		else if (adcValue >= 2048)
-//		{
-//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
-//			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_RESET);
-//		}
-
-
-    /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
+    HCSR04_Trigger(GPIOA, GPIO_PIN_1);
+		HAL_Delay(1000);
   }
   /* USER CODE END 3 */
 }
@@ -396,6 +321,55 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 16-1;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 65535;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_IC_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  if (HAL_TIM_IC_ConfigChannel(&htim1, &sConfigIC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
   * @brief TIM4 Initialization Function
   * @param None
   * @retval None
@@ -474,10 +448,14 @@ static void MX_GPIO_Init(void)
 /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1|GPIO_PIN_10, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, LCD_RS_Pin|LCD_RW_Pin|LCD_E_Pin|LCD_D4_Pin
@@ -486,6 +464,13 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
 
+  /*Configure GPIO pins : PA1 PA10 */
+  GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_10;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
   /*Configure GPIO pins : LCD_RS_Pin LCD_RW_Pin LCD_E_Pin LCD_D4_Pin
                            LCD_D5_Pin LCD_D6_Pin LCD_D7_Pin */
   GPIO_InitStruct.Pin = LCD_RS_Pin|LCD_RW_Pin|LCD_E_Pin|LCD_D4_Pin
@@ -493,6 +478,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PE8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PD13 */
