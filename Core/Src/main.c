@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -26,6 +27,9 @@
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
+typedef StaticTask_t osStaticThreadDef_t;
+typedef StaticSemaphore_t osStaticMutexDef_t;
+typedef StaticSemaphore_t osStaticSemaphoreDef_t;
 /* USER CODE BEGIN PTD */
 
 /* USER CODE END PTD */
@@ -48,6 +52,98 @@ I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim4;
 
+/* Definitions for LCDTask */
+osThreadId_t LCDTaskHandle;
+uint32_t LCDTaskBuffer[ 128 ];
+osStaticThreadDef_t LCDTaskControlBlock;
+const osThreadAttr_t LCDTask_attributes = {
+  .name = "LCDTask",
+  .cb_mem = &LCDTaskControlBlock,
+  .cb_size = sizeof(LCDTaskControlBlock),
+  .stack_mem = &LCDTaskBuffer[0],
+  .stack_size = sizeof(LCDTaskBuffer),
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for TeHuSensorTask */
+osThreadId_t TeHuSensorTaskHandle;
+uint32_t TeHuSensorTaskBuffer[ 128 ];
+osStaticThreadDef_t TeHuSensorTaskControlBlock;
+const osThreadAttr_t TeHuSensorTask_attributes = {
+  .name = "TeHuSensorTask",
+  .cb_mem = &TeHuSensorTaskControlBlock,
+  .cb_size = sizeof(TeHuSensorTaskControlBlock),
+  .stack_mem = &TeHuSensorTaskBuffer[0],
+  .stack_size = sizeof(TeHuSensorTaskBuffer),
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for LightSensorTask */
+osThreadId_t LightSensorTaskHandle;
+uint32_t LightSensorTaskBuffer[ 128 ];
+osStaticThreadDef_t LightSensorTaskControlBlock;
+const osThreadAttr_t LightSensorTask_attributes = {
+  .name = "LightSensorTask",
+  .cb_mem = &LightSensorTaskControlBlock,
+  .cb_size = sizeof(LightSensorTaskControlBlock),
+  .stack_mem = &LightSensorTaskBuffer[0],
+  .stack_size = sizeof(LightSensorTaskBuffer),
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for IrSensorTask */
+osThreadId_t IrSensorTaskHandle;
+uint32_t IrSensorTaskBuffer[ 128 ];
+osStaticThreadDef_t IrSensorTaskControlBlock;
+const osThreadAttr_t IrSensorTask_attributes = {
+  .name = "IrSensorTask",
+  .cb_mem = &IrSensorTaskControlBlock,
+  .cb_size = sizeof(IrSensorTaskControlBlock),
+  .stack_mem = &IrSensorTaskBuffer[0],
+  .stack_size = sizeof(IrSensorTaskBuffer),
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for UsSensorTask */
+osThreadId_t UsSensorTaskHandle;
+uint32_t UsSensorTaskBuffer[ 128 ];
+osStaticThreadDef_t UsSensorTaskControlBlock;
+const osThreadAttr_t UsSensorTask_attributes = {
+  .name = "UsSensorTask",
+  .cb_mem = &UsSensorTaskControlBlock,
+  .cb_size = sizeof(UsSensorTaskControlBlock),
+  .stack_mem = &UsSensorTaskBuffer[0],
+  .stack_size = sizeof(UsSensorTaskBuffer),
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for TempDataMutex */
+osMutexId_t TempDataMutexHandle;
+osStaticMutexDef_t TempDataMutexControlBlock;
+const osMutexAttr_t TempDataMutex_attributes = {
+  .name = "TempDataMutex",
+  .cb_mem = &TempDataMutexControlBlock,
+  .cb_size = sizeof(TempDataMutexControlBlock),
+};
+/* Definitions for HumDataMutex */
+osMutexId_t HumDataMutexHandle;
+osStaticMutexDef_t HumDataMutexControlBlock;
+const osMutexAttr_t HumDataMutex_attributes = {
+  .name = "HumDataMutex",
+  .cb_mem = &HumDataMutexControlBlock,
+  .cb_size = sizeof(HumDataMutexControlBlock),
+};
+/* Definitions for THSensorReadySem */
+osSemaphoreId_t THSensorReadySemHandle;
+osStaticSemaphoreDef_t THSensorReadySemControlBlock;
+const osSemaphoreAttr_t THSensorReadySem_attributes = {
+  .name = "THSensorReadySem",
+  .cb_mem = &THSensorReadySemControlBlock,
+  .cb_size = sizeof(THSensorReadySemControlBlock),
+};
+/* Definitions for IrSensorReadySem */
+osSemaphoreId_t IrSensorReadySemHandle;
+osStaticSemaphoreDef_t IrSensorReadySemControlBlock;
+const osSemaphoreAttr_t IrSensorReadySem_attributes = {
+  .name = "IrSensorReadySem",
+  .cb_mem = &IrSensorReadySemControlBlock,
+  .cb_size = sizeof(IrSensorReadySemControlBlock),
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -59,6 +155,12 @@ static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_ADC2_Init(void);
+void StartLCDTask(void *argument);
+void StartTeHuSensorTask(void *argument);
+void StartLightSensorTask(void *argument);
+void StartIrSensorTask(void *argument);
+void StartUsSensorTask(void *argument);
+
 /* USER CODE BEGIN PFP */
 
 
@@ -68,8 +170,8 @@ static void MX_ADC2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 unsigned char deg_sym[FONT_HEIGHT] = {0x07,0x05,0x07,0x00,0x00,0x00,0x00,0x00};
-volatile int adc1Flag = 0;
-volatile int adc2Flag = 0;
+float cel;
+float rh;
 /* USER CODE END 0 */
 
 /**
@@ -105,110 +207,81 @@ int main(void)
   MX_TIM4_Init();
   MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
-  // temperature-humidity sensor
-  SHT2x_Init(&hi2c1);
-  SHT2x_SetResolution(RES_14_12);
-  SHT2x_SoftReset();
-  // LCD display
-  lcdInit();
-  // load degree symbol
-  lcdLoadChar(deg_sym,6);
+
   //PWM timer
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
 
-
+  HAL_ADC_Start_IT(&hadc1);
+  HAL_ADC_Start_IT(&hadc2);
 
   /* USER CODE END 2 */
 
+  /* Init scheduler */
+  osKernelInitialize();
+  /* Create the mutex(es) */
+  /* creation of TempDataMutex */
+  TempDataMutexHandle = osMutexNew(&TempDataMutex_attributes);
+
+  /* creation of HumDataMutex */
+  HumDataMutexHandle = osMutexNew(&HumDataMutex_attributes);
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  osMutexRelease (TempDataMutexHandle);
+  /* USER CODE END RTOS_MUTEX */
+
+  /* Create the semaphores(s) */
+  /* creation of THSensorReadySem */
+  THSensorReadySemHandle = osSemaphoreNew(1, 0, &THSensorReadySem_attributes);
+
+  /* creation of IrSensorReadySem */
+  IrSensorReadySemHandle = osSemaphoreNew(1, 0, &IrSensorReadySem_attributes);
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of LCDTask */
+  LCDTaskHandle = osThreadNew(StartLCDTask, NULL, &LCDTask_attributes);
+
+  /* creation of TeHuSensorTask */
+  TeHuSensorTaskHandle = osThreadNew(StartTeHuSensorTask, NULL, &TeHuSensorTask_attributes);
+
+  /* creation of LightSensorTask */
+  LightSensorTaskHandle = osThreadNew(StartLightSensorTask, NULL, &LightSensorTask_attributes);
+
+  /* creation of IrSensorTask */
+  IrSensorTaskHandle = osThreadNew(StartIrSensorTask, NULL, &IrSensorTask_attributes);
+
+  /* creation of UsSensorTask */
+  UsSensorTaskHandle = osThreadNew(StartUsSensorTask, NULL, &UsSensorTask_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
-  HAL_ADC_Start_IT(&hadc1);
-  HAL_ADC_Start_IT(&hadc2);
-//  uint32_t adcValue = 0;
-//  volatile HAL_StatusTypeDef adcPoolResult;
-
   while (1)
   {
-	  uint32_t adcValue;
-
-
-	    if(adc1Flag)
-	    {
-	          adcValue = HAL_ADC_GetValue(&hadc1);
-
-	          float volts = adcValue * 5.0 / 4096.0;
-	          float amps = volts / 10000.0;  // across 10,000 Ohms
-	          float microamps = amps * 1000000;
-	          float lux = microamps * 2.0;
-
-	          uint32_t dutyCycle = 1000 - lux;
-
-	          TIM4->CCR1=dutyCycle;
-	          TIM4->CCR3=dutyCycle;
-	          TIM4->CCR4=dutyCycle;
-
-	          adc1Flag = 0;
-	          HAL_ADC_Start_IT(&hadc1);
-
-	    	  }
-	    if (adc2Flag) {
-	  	  adcValue = HAL_ADC_GetValue(&hadc2);
-
-
-	  	  if (adcValue < 2048)
-	  		{
-	  			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
-
-	  		}
-	  		else if (adcValue >= 2048)
-	  		{
-	  			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
-	  		}
-	  	  adc2Flag = 0;
-	  	  HAL_ADC_Start_IT(&hadc2);
-
-	    }
-
-
-	  float cel = SHT2x_GetTemperature(1);
-	  float rh = SHT2x_GetRelativeHumidity(1);
-
-	  lcdClrScr();
-	  lcdPuts("Temp: ");
-	  lcdFtos(cel, 3);
-	  lcdPutc(6);
-	  lcdPuts("C\n");
-	  lcdPuts("Hum : ");
-	  lcdFtos(rh, 3);
-	  lcdPuts(" %");
-
-
-
-
-
-//	  adcPoolResult = HAL_ADC_PollForConversion(&hadc2, 10);
-//
-//	  if (adcPoolResult == HAL_OK) {
-//		  adcValue = HAL_ADC_GetValue(&hadc2);
-//	  } else {
-//		  continue;
-//	  }
-//
-//	  if (adcValue < 2048)
-//		{
-//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
-//			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
-//		}
-//		else if (adcValue >= 2048)
-//		{
-//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
-//			//HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_RESET);
-//		}
-
-
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -508,15 +581,201 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+// Interrupt callbacks
+
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
-  if (hadc->Instance == ADC1)
-	  adc1Flag = 1;
+  if (hadc->Instance == ADC1) {
+
+	  osThreadFlagsSet(LightSensorTaskHandle, 0x00000001U);
+	  //HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
+  }
+
+
   else if (hadc->Instance == ADC2)
-	  adc2Flag = 1;
+	  osSemaphoreRelease(IrSensorReadySemHandle);
+}
+
+void HAL_I2C_MasterTxCpltCallback (I2C_HandleTypeDef * hi2c)
+{
+	SHT2x_RecieveRaw();
+}
+
+void HAL_I2C_MasterRxCpltCallback (I2C_HandleTypeDef * hi2c)
+{
+	osSemaphoreRelease(THSensorReadySemHandle);
 }
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartLCDTask */
+/**
+  * @brief  Function implementing the LCDTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartLCDTask */
+void StartLCDTask(void *argument)
+{
+  /* USER CODE BEGIN 5 */
+  lcdInit();
+  // load degree symbol
+  lcdLoadChar(deg_sym,6);
+
+  lcdPuts("Temp:        ");
+  lcdPutc(6);
+  lcdPuts("C\nHum :         %");
+
+  /* Infinite loop */
+  for(;;)
+  {
+      osThreadFlagsWait(0x00000001U, osFlagsWaitAny, osWaitForever);
+	  lcdGoto(1, 6);
+	  osMutexAcquire (TempDataMutexHandle, osWaitForever);
+	  lcdFtos(cel, 3);
+	  osMutexRelease (TempDataMutexHandle);
+	  lcdGoto(2, 6);
+	  osMutexAcquire (HumDataMutexHandle, osWaitForever);
+	  lcdFtos(rh, 3);
+	  osMutexRelease (HumDataMutexHandle);
+	  osDelay(500);
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartTeHuSensorTask */
+/**
+* @brief Function implementing the TeHuSensorTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTeHuSensorTask */
+void StartTeHuSensorTask(void *argument)
+{
+  /* USER CODE BEGIN StartTeHuSensorTask */
+  /* Infinite loop */
+  for(;;)
+  {
+	  SHT2x_RequestTemperature(1);
+	  //osSemaphoreAcquire (THSensorReadySemHandle,  osWaitForever);
+	  osMutexAcquire (TempDataMutexHandle, osWaitForever);
+	  cel = SHT2x_GetTemperature();
+	  osMutexRelease (TempDataMutexHandle);
+
+	  SHT2x_RequestRelativeHumidity(1);
+	  //osSemaphoreAcquire (THSensorReadySemHandle,  osWaitForever);
+	  osMutexAcquire (HumDataMutexHandle, osWaitForever);
+	  rh = SHT2x_GetRelativeHumidity();
+	  osMutexRelease (HumDataMutexHandle);
+
+	  osThreadFlagsSet(LCDTaskHandle, 0x00000001U);
+  }
+  /* USER CODE END StartTeHuSensorTask */
+}
+
+/* USER CODE BEGIN Header_StartLightSensorTask */
+/**
+* @brief Function implementing the LightSensorTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartLightSensorTask */
+void StartLightSensorTask(void *argument)
+{
+  /* USER CODE BEGIN StartLightSensorTask */
+  uint32_t adcValue;
+  /* Infinite loop */
+  for(;;)
+  {
+	  osThreadFlagsWait(0x00000001U, osFlagsWaitAny, osWaitForever);
+	  //HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
+	  adcValue = HAL_ADC_GetValue(&hadc1);
+
+	  float volts = adcValue * 5.0 / 4096.0;
+	  float amps = volts / 10000.0;  // across 10,000 Ohms
+	  float microamps = amps * 1000000;
+	  float lux = microamps * 2.0;
+
+	  uint32_t dutyCycle = 1000 - lux;
+
+	  TIM4->CCR1=dutyCycle;
+	  TIM4->CCR3=dutyCycle;
+	  TIM4->CCR4=dutyCycle;
+
+	  HAL_ADC_Start_IT(&hadc1);
+  }
+  /* USER CODE END StartLightSensorTask */
+}
+
+/* USER CODE BEGIN Header_StartIrSensorTask */
+/**
+* @brief Function implementing the IrSensorTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartIrSensorTask */
+void StartIrSensorTask(void *argument)
+{
+  /* USER CODE BEGIN StartIrSensorTask */
+  uint32_t adcValue;
+  /* Infinite loop */
+  for(;;)
+  {
+	  osSemaphoreAcquire (IrSensorReadySemHandle,  osWaitForever);
+	  adcValue = HAL_ADC_GetValue(&hadc2);
+
+	  if (adcValue < 2048)
+		{
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
+
+		}
+		else if (adcValue >= 2048)
+		{
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
+		}
+	  HAL_ADC_Start_IT(&hadc2);
+  }
+  /* USER CODE END StartIrSensorTask */
+}
+
+/* USER CODE BEGIN Header_StartUsSensorTask */
+/**
+* @brief Function implementing the UsSensorTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartUsSensorTask */
+void StartUsSensorTask(void *argument)
+{
+  /* USER CODE BEGIN StartUsSensorTask */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartUsSensorTask */
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM1 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM1) {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.

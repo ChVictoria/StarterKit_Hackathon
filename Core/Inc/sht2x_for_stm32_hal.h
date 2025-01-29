@@ -30,10 +30,13 @@ void SHT2x_SetResolution(SHT2x_Resolution res);
 
 uint8_t SHT2x_ReadUserReg(void);
 
-uint16_t SHT2x_GetRaw(uint8_t cmd);
+uint16_t SHT2x_GetRaw();
+void SHT2x_RecieveRaw();
 
-float SHT2x_GetTemperature(uint8_t hold);
-float SHT2x_GetRelativeHumidity(uint8_t hold);
+float SHT2x_GetTemperature();
+float SHT2x_GetRelativeHumidity();
+void SHT2x_RequestRelativeHumidity(uint8_t hold);
+void SHT2x_RequestTemperature(uint8_t hold);
 
 float SHT2x_CelsiusToFahrenheit(float celsius);
 float SHT2x_CelsiusToKelvin(float celsius);

@@ -7,6 +7,7 @@ extern "C"{
 #endif
 
 I2C_HandleTypeDef *_sht2x_ui2c;
+uint8_t rawVal[3] = { 0 };
 	
 /**
  * @brief Initializes the SHT2x temperature/humidity sensor.
@@ -41,11 +42,16 @@ uint8_t SHT2x_ReadUserReg(void) {
  * @param cmd Command to send to sensor.
  * @return 16-bit raw value, 0 to 65535.
  */
-uint16_t SHT2x_GetRaw(uint8_t cmd) {
-	uint8_t val[3] = { 0 };
-	HAL_I2C_Master_Transmit(_sht2x_ui2c, SHT2x_I2C_ADDR << 1, &cmd, 1, SHT2x_TIMEOUT);
-	HAL_I2C_Master_Receive(_sht2x_ui2c, SHT2x_I2C_ADDR << 1, val, 3, SHT2x_TIMEOUT);
-	return val[0] << 8 | val[1];
+uint16_t SHT2x_GetRaw() {
+	return rawVal[0] << 8 | rawVal[1];
+}
+
+void SHT2x_RequestRaw(uint8_t cmd) {
+	HAL_I2C_Master_Transmit_IT(_sht2x_ui2c, SHT2x_I2C_ADDR << 1, &cmd, 1);
+}
+
+void SHT2x_RecieveRaw() {
+	HAL_I2C_Master_Receive_IT(_sht2x_ui2c, SHT2x_I2C_ADDR << 1, rawVal, 3);
 }
 
 /**
@@ -53,19 +59,28 @@ uint16_t SHT2x_GetRaw(uint8_t cmd) {
  * @param hold Holding mode, 0 for no hold master, 1 for hold master.
  * @return Floating point temperature value.
  */
-float SHT2x_GetTemperature(uint8_t hold) {
-	uint8_t cmd = (hold ? SHT2x_READ_TEMP_HOLD : SHT2x_READ_TEMP_NOHOLD);
-	return -46.85 + 175.72 * (SHT2x_GetRaw(cmd) / 65536.0);
+float SHT2x_GetTemperature() {
+	return -46.85 + 175.72 * (SHT2x_GetRaw() / 65536.0);
 }
+
+void SHT2x_RequestTemperature(uint8_t hold) {
+	uint8_t cmd = (hold ? SHT2x_READ_TEMP_HOLD : SHT2x_READ_TEMP_NOHOLD);
+	SHT2x_RequestRaw(cmd);
+}
+
 
 /**
  * @brief Measures and gets the current relative humidity.
  * @param hold Holding mode, 0 for no hold master, 1 for hold master.
  * @return Floating point relative humidity value.
  */
-float SHT2x_GetRelativeHumidity(uint8_t hold) {
+float SHT2x_GetRelativeHumidity() {
+	return -6 + 125.00 * (SHT2x_GetRaw() / 65536.0);
+}
+
+void SHT2x_RequestRelativeHumidity(uint8_t hold) {
 	uint8_t cmd = (hold ? SHT2x_READ_RH_HOLD : SHT2x_READ_RH_NOHOLD);
-	return -6 + 125.00 * (SHT2x_GetRaw(cmd) / 65536.0);
+	SHT2x_RequestRaw(cmd);
 }
 
 /**
