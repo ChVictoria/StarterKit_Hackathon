@@ -23,6 +23,9 @@
 /* USER CODE BEGIN Includes */
 #include "sht2x_for_stm32_hal.h"
 #include "hd44780.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,7 +53,14 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
+volatile uint32_t risingTick = 0;
+volatile uint32_t fallingTick = 0;
+volatile uint32_t soundTime = 0;
+volatile bool shouldRise = true;
 
+const float SPEED_OF_SOUND_CM_IN_MS = 0.0343f;
+
+char distanceOut[16];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -118,9 +128,11 @@ int main(void)
   // load degree symbol
   lcdLoadChar(deg_sym,6);
   //PWM timer
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
+  //HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+  //HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+  //HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
+
+
 
 
   HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_2);
@@ -137,8 +149,14 @@ int main(void)
   while (1)
   {
 	  uint32_t adcValue;
+	  //htim3->CCR1 = 0; // blue
+	  //htim3->CCR2 = 0;
+	  TIM3->CCR3 = 10;
+	  //HAL_GPIO_WritePin(GPIOC, GREEN_RGB_Pin, GPIO_PIN_RESET);
+	  //HAL_GPIO_WritePin(GPIOC, RED_RGB_Pin, GPIO_PIN_SET);
+	  //HAL_GPIO_WritePin(GPIOC, BLUE_RGB_Pin, GPIO_PIN_RESET);
 
-
+/*
 	    if(adc1Flag)
 	    {
 	          adcValue = HAL_ADC_GetValue(&hadc1);
@@ -172,27 +190,42 @@ int main(void)
 	          HAL_ADC_Start_IT(&hadc1);
 
 	    	  }
-//	    if (adc2Flag) {
-//	  	  adcValue = HAL_ADC_GetValue(&hadc2);
-//
-//
-//	  	  if (adcValue < 2048)
-//	  		{
-//	  			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
-//
-//	  		}
-//	  		else if (adcValue >= 2048)
-//	  		{
-//	  			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
-//	  		}
-//	  	  adc2Flag = 0;
-//	  	  HAL_ADC_Start_IT(&hadc2);
-//
-//	    }
+	    	  */
+	    if (adc2Flag) {
+	  	  adcValue = HAL_ADC_GetValue(&hadc2);
+
+	  	  int distance;
+
+	  	  if (adcValue >= 2900) {distance=20;}
+	  	  else if (adcValue >= 2300) {distance=30;}
+			else if (adcValue >= 1700) {distance=40;}
+			else if (adcValue >= 1400) {distance=50;}
+			else if (adcValue >= 1100) {distance=60;}
+			else if (adcValue >= 1000) {distance=70;}
+			else if (adcValue >= 840) {distance=80;}
+			else if (adcValue >= 750) {distance=90;}
+			else if (adcValue >= 650) {distance=100;}
+			else if (adcValue >= 600) {distance=110;}
+			else if (adcValue >= 530) {distance=120;}
+
+
+
+	  	  //lcdClrScr();
+	  	  char firstDist[16];
+	  	sprintf(firstDist, "d1 = %d cm", distance);
+
+	  	  lcdPuts(firstDist);
+	  	lcdPuts(distanceOut);
+	  	  adc2Flag = 0;
+	  	  HAL_ADC_Start_IT(&hadc2);
+
+	    }
 
 
 	  float cel = SHT2x_GetTemperature(1);
 	  float rh = SHT2x_GetRelativeHumidity(1);
+
+//	  lcdPuts(distanceOut);
 
 //	  lcdClrScr();
 //	  lcdPuts("Temp: ");
@@ -205,6 +238,7 @@ int main(void)
 
 	  HCSR04_Trigger(GPIOA, GPIO_PIN_1);
 	  HAL_Delay(1000);
+	  lcdClrScr();
 
 
 
@@ -484,7 +518,7 @@ static void MX_TIM4_Init(void)
 
   /* USER CODE END TIM4_Init 1 */
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 0;
+  htim4.Init.Prescaler = 16000;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim4.Init.Period = 65535;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -524,6 +558,7 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
@@ -531,6 +566,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5|LCD_RS_Pin|LCD_RW_Pin|LCD_E_Pin
                           |LCD_D4_Pin|LCD_D5_Pin|LCD_D6_Pin|LCD_D7_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, GREEN_RGB_Pin|BLUE_RGB_Pin|RED_RGB_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
@@ -549,6 +587,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : GREEN_RGB_Pin BLUE_RGB_Pin RED_RGB_Pin */
+  GPIO_InitStruct.Pin = GREEN_RGB_Pin|BLUE_RGB_Pin|RED_RGB_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PA1 */
   GPIO_InitStruct.Pin = GPIO_PIN_1;
@@ -595,6 +640,34 @@ void HCSR04_Trigger(GPIO_TypeDef* Port, uint16_t Pin) {
 	HAL_GPIO_WritePin(Port, Pin, GPIO_PIN_SET);
 	HAL_Delay(10);
 	HAL_GPIO_WritePin(Port, Pin, GPIO_PIN_RESET);
+}
+
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	if (htim->Channel != HAL_TIM_ACTIVE_CHANNEL_2) {
+		return;
+	}
+	if (shouldRise) {
+		risingTick = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+		__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_2, TIM_INPUTCHANNELPOLARITY_FALLING);
+		shouldRise = false;
+		return;
+	}
+	fallingTick = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+	__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_2, TIM_INPUTCHANNELPOLARITY_RISING);
+	shouldRise = true;
+	if (fallingTick >= risingTick) {
+		soundTime = fallingTick - risingTick;
+	} else {
+		soundTime = (htim->Instance->ARR - risingTick) + fallingTick;
+	}
+	float distance = (soundTime * SPEED_OF_SOUND_CM_IN_MS) / 2;
+
+//	char distanceOut[16];
+
+	sprintf(distanceOut, "\nd2 = %d cm", (int)distance);
+	//sslcdClrScr();
+//	lcdPuts(distanceOut);
 }
 
 /* USER CODE END 4 */

@@ -44,12 +44,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-volatile uint32_t risingTick = 0;
-volatile uint32_t fallingTick = 0;
-volatile uint32_t soundTime = 0;
-volatile bool shouldRise = true;
 
-const float SPEED_OF_SOUND_CM_IN_MS = 0.0343f;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -238,30 +233,31 @@ void TIM1_CC_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
-{
-	if (htim->Channel != HAL_TIM_ACTIVE_CHANNEL_2) {
-		return;
-	}
-	if (shouldRise) {
-		risingTick = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
-		__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_2, TIM_INPUTCHANNELPOLARITY_FALLING);
-		shouldRise = false;
-		return;
-	}
-	fallingTick = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
-	__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_2, TIM_INPUTCHANNELPOLARITY_RISING);
-	shouldRise = true;
-	if (fallingTick >= risingTick) {
-		soundTime = fallingTick - risingTick;
-	} else {
-		soundTime = (htim->Instance->ARR - risingTick) + fallingTick;
-	}
-	float distance = (soundTime * SPEED_OF_SOUND_CM_IN_MS) / 2;
-
-	char distanceOut[16];
-	sprintf(distanceOut, "d = %.2f cm", distance);
-	lcdClrScr();
-	lcdPuts(distanceOut);
-}
+//void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+//{
+//	if (htim->Channel != HAL_TIM_ACTIVE_CHANNEL_2) {
+//		return;
+//	}
+//	if (shouldRise) {
+//		risingTick = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+//		__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_2, TIM_INPUTCHANNELPOLARITY_FALLING);
+//		shouldRise = false;
+//		return;
+//	}
+//	fallingTick = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+//	__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_2, TIM_INPUTCHANNELPOLARITY_RISING);
+//	shouldRise = true;
+//	if (fallingTick >= risingTick) {
+//		soundTime = fallingTick - risingTick;
+//	} else {
+//		soundTime = (htim->Instance->ARR - risingTick) + fallingTick;
+//	}
+//	float distance = (soundTime * SPEED_OF_SOUND_CM_IN_MS) / 2;
+//
+//	char distanceOut[16];
+//
+//	sprintf(distanceOut, "\nd = %.2f cm", distance);
+//	//sslcdClrScr();
+//	lcdPuts(distanceOut);
+//}
 /* USER CODE END 1 */
