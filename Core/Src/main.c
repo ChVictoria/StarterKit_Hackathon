@@ -23,7 +23,9 @@
 /* USER CODE BEGIN Includes */
 #include "sht2x_for_stm32_hal.h"
 #include "hd44780.h"
+#include <string.h>
 #include <stdio.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,12 +50,21 @@ ADC_HandleTypeDef hadc2;
 I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
+volatile uint32_t risingTick = 0;
+volatile uint32_t fallingTick = 0;
+volatile uint32_t soundTime = 0;
+volatile bool shouldRise = true;
+volatile bool isSoundOn = false;
+volatile bool isSoundOn2 = false;
+const float SPEED_OF_SOUND_CM_IN_MS = 0.0343f;
 
+char distanceOut[16];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -65,6 +76,7 @@ static void MX_TIM4_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART3_UART_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 
@@ -76,7 +88,8 @@ static void MX_USART3_UART_Init(void);
 unsigned char deg_sym[FONT_HEIGHT] = {0x07,0x05,0x07,0x00,0x00,0x00,0x00,0x00};
 volatile int adc1Flag = 0;
 volatile int adc2Flag = 0;
-volatile int task = 0;
+volatile int task = 1;
+volatile int dis2;
 /* USER CODE END 0 */
 
 /**
@@ -114,6 +127,7 @@ int main(void)
   MX_ADC2_Init();
   MX_TIM1_Init();
   MX_USART3_UART_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   // temperature-humidity sensor
   SHT2x_Init(&hi2c1);
@@ -124,12 +138,13 @@ int main(void)
   // load degree symbol
   lcdLoadChar(deg_sym,6);
   //PWM timer
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
 
 
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
 
+  HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -159,19 +174,19 @@ int main(void)
 	          uint32_t dutyCycle = 1000 - lux;
 
 	          HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13 | GPIO_PIN_12 | GPIO_PIN_14 | GPIO_PIN_15, GPIO_PIN_RESET);
-	          	          HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_RESET);
+	          isSoundOn = false;
 	          	          if (lux>100){
 
 	          	          } else if (lux>30) {
 	          	        	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
 	          	          } else if (lux>10) {
-	          	        	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
-	          	        	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
+	          	        	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12 | GPIO_PIN_15, GPIO_PIN_SET);
 	          	          } else if (lux>1) {
 	          	        	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13 | GPIO_PIN_15 | GPIO_PIN_12, GPIO_PIN_SET);
 	          	          } else {
 	          	        	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13 | GPIO_PIN_12 | GPIO_PIN_14 | GPIO_PIN_15, GPIO_PIN_SET);
-	          	        	  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_SET);
+
+	          	        	  isSoundOn = true;
 	          	          }
 
 
@@ -181,11 +196,59 @@ int main(void)
 	          adc1Flag = 0;
 	          HAL_ADC_Start_IT(&hadc1);
 
+
 	    	  }
 	    break;
 	  }
 	  case 1:
+	  {
+		  HCSR04_Trigger(GPIOA, GPIO_PIN_1);
+		  if (adc2Flag) {
+		  	  	  adcValue = HAL_ADC_GetValue(&hadc2);
+
+		  	  	  int distance;
+
+		  	  	  float b1 = 0.1;
+		  	  	  float b2;
+
+		  	  	  if (adcValue >= 2900) {distance=20;  b1 = 0;}
+		  	  	  else if (adcValue >= 2300) {distance=30; b1 = 1;}
+		  			else if (adcValue >= 1700) {distance=40; b1 = 0.9;}
+		  			else if (adcValue >= 1400) {distance=50; b1 = 0.9;}
+		  			else if (adcValue >= 1100) {distance=60; b1 = 0.8;}
+		  			else if (adcValue >= 1000) {distance=70; b1 = 0.8;}
+		  			else if (adcValue >= 840) {distance=80; b1 = 0.6;}
+		  			else if (adcValue >= 750) {distance=90; b1 = 0.6;}
+		  			else if (adcValue >= 650) {distance=100; b1 = 0.4;}
+		  			else if (adcValue >= 600) {distance=110; b1 = 0.4;}
+		  			else if (adcValue >= 530) {distance=120; b1 = 0.1;}
+		  	  	  isSoundOn2 = distance <=30 || (dis2>10 && dis2<=30); // dis2 may be 0
+
+		  	  	  	 if (dis2 >= 120) {b2=0.1;}
+		  	  	  	 else if (dis2 >= 90) {b2=0.4;}
+		  	  	  	 else if (dis2 >= 70) {b2=0.6;}
+		  	  	 	 else if (dis2 >= 50) {b2=0.8;}
+					 else if (dis2 >= 40) {b2=0.9;}
+					 else if (dis2 >= 30) {b2=1;}
+					 else {b2=0;}
+
+		  	  		TIM3->CCR1=isSoundOn2?1000:0; // red
+		  	  		TIM3->CCR2=(int)(1000*b1); //green
+		  	  		TIM3->CCR3=(int)(1000*b2); //blue
+
+
+		  	  	  //lcdClrScr();
+		  	  	  char firstDist[16];
+		  	  	sprintf(firstDist, "d1 = %d cm", distance);
+		  	  lcdClrScr();
+		  	  	  lcdPuts(firstDist);
+		  	  	lcdPuts(distanceOut);
+		  	  	  adc2Flag = 0;
+		  	  	  HAL_ADC_Start_IT(&hadc2);
+
+		  	    }
 		  break;
+	  }
 
 	  case 2:
 	  {
@@ -205,16 +268,18 @@ int main(void)
 	  lcdPuts(" %");
 
 
-	  int len = snprintf(NULL, 0, "temp=%.2f C, hum=%.2f \n", cel, rh);
+	  int len = snprintf(NULL, 0, "temp=%.2f C, hum=%.2f \r\n", cel, rh);
 	  char tempHumOut[len];
 	  sprintf(tempHumOut, "temp=%.2f C, hum=%.2f \r\n", cel, rh);
 
 	  HAL_UART_Transmit(&huart3, (uint8_t *)tempHumOut, len, 100);
 
-	  HAL_Delay(500);
+
 	  break;
 	  }
   }
+	  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, (isSoundOn&& task==0)  || (isSoundOn2&& task==1) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+	  HAL_Delay(500);
 
 
 	  //	    if (adc2Flag) {
@@ -471,6 +536,63 @@ static void MX_TIM1_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 1600;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 1000;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
+
+}
+
+/**
   * @brief TIM4 Initialization Function
   * @param None
   * @retval None
@@ -565,6 +687,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5|LCD_RS_Pin|LCD_RW_Pin|LCD_E_Pin
@@ -637,6 +760,40 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 	  adc1Flag = 1;
   else if (hadc->Instance == ADC2)
 	  adc2Flag = 1;
+}
+
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	if (htim->Channel != HAL_TIM_ACTIVE_CHANNEL_2) {
+		return;
+	}
+	if (shouldRise) {
+		risingTick = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+		__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_2, TIM_INPUTCHANNELPOLARITY_FALLING);
+		shouldRise = false;
+		return;
+	}
+	fallingTick = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+	__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_2, TIM_INPUTCHANNELPOLARITY_RISING);
+	shouldRise = true;
+	if (fallingTick >= risingTick) {
+		soundTime = fallingTick - risingTick;
+	} else {
+		soundTime = (htim->Instance->ARR - risingTick) + fallingTick;
+	}
+	dis2 = (int)(soundTime * SPEED_OF_SOUND_CM_IN_MS) / 2;
+
+	if (dis2>120){
+		dis2=120;
+	}else if (dis2<20){
+		dis2=20;
+	}
+
+//	char distanceOut[16];
+
+	sprintf(distanceOut, "\nd2 = %d cm", (int)dis2);
+	//sslcdClrScr();
+//	lcdPuts(distanceOut);
 }
 
 /* USER CODE END 4 */
